@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda function using inline code
+
+Resources:
+  ProcessTelemetryLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ProcessTelemetryLambda
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::525894399454:role/LabRole
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          from decimal import Decimal
+
+          dynamodb = boto3.resource('dynamodb')
+          table = dynamodb.Table('TelemetryData')
+
+          def lambda_handler(event, context):
+              for record in event['Records']:
+                  payload = json.loads(record['kinesis']['data'], strict=False)
+                  vehicle_id = payload['vehicle_id']
+                  speed = float(payload['speed'])
+                  acceleration = float(payload['acceleration'])
+                  timestamp = payload['timestamp']
+                  region = payload.get('region', 'unknown')
+
+                  if acceleration < -5:
+                      print(f"⚠️ Posible accidente detectado en vehículo {vehicle_id}")
+
+                  table.put_item(Item={
+                      'vehicle_id': vehicle_id,
+                      'timestamp': timestamp,
+                      'speed': Decimal(str(speed)),
+                      'acceleration': Decimal(str(acceleration)),
+                      'region': region
+                  })
+
+              return {'statusCode': 200, 'body': 'OK'}
